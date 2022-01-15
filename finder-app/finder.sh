@@ -1,27 +1,40 @@
 #!/bin/bash
 
-filesdir=$1
-searchstr=$2
+##########################################################
+#       S22-AESD-Assignment-1: finder.sh                 #
+#                                                        #
+#       Author: Santhosh, santhosh@colorado.edu          # 
+#                                                        # 
+##########################################################
 
-#checks for the unspecified arguments
-if [ "$#" -eq "2" ]
+#Input arguments
+FILESDIR=$1
+SEARCHSTR=$2
+
+#checks for the valid number of arguments
+if [ "$#" -ne "2" ]
 then 
-	if [ -d "$filesdir" ]
-	then
-		echo "The number of files are $(find "$filesdir" -type f | wc -l) and the number of matching lines are $(grep -R "$searchstr" "$filesdir" | wc -l)"
-		exit 0
-	else 
-		echo "DIR not found"
-		exit 1
-	fi
-else 
-	echo "ERROR: Invalid Number of Arguments."
-	echo "Total number of arguments should be 2."
-	echo "The order of the arguments should be:"
-	echo "  1) Path to a directory on the filesystem."
-	echo "  2) String to be searched within the specified filesystem."
+	cat  <<- EOF
+	ERROR: Invalid Number of Arguments
+	Total number of arguments should be 2.
+	The order of the arguments should be:
+	  1) Path to a directory on the filesystem.
+	  2) String to be searched within the specified filesystem.
+	EOF
 	exit 1
-
 fi
+
+#checks if the file directory exists
+if [ -d "$FILESDIR" ]
+then
+	NUMFILES=$(find "$FILESDIR" -type f | wc -l)
+	NUMLINES=$(grep -R "$SEARCHSTR" "$FILESDIR" | wc -l)
+	echo "The number of files are $NUMFILES and the number of matching lines are $NUMLINES"
+	exit 0
+else
+	echo "$FILESDIR: does not exists"
+	exit 1
+fi
+
 
 
