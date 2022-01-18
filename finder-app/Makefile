@@ -1,7 +1,6 @@
 #Makfile to build the writer application
 
-
-#compiler
+#native compiler
 CC = gcc
 
 #compiler flags
@@ -16,13 +15,18 @@ OBJS = $(SRCS:.c=.o)
 #Executable Target file
 TARGET = writer
 
+
+%.o: %.c
+	$(CROSS_COMPILE)-$(CC) $(CFLAGS) -c -o $@ $<
+
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
+	$(CROSS_COMPILE)-$(CC) $(CFLAGS) $^ -o $@
 
-.PHONY : clean
+
+.PHONY: clean
 
 clean:
-	$(RM) $(TARGET) *.o
+	$(RM) $(TARGET) *.o *.elf *.map
 
