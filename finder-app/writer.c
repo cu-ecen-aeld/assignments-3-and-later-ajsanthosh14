@@ -39,7 +39,7 @@ int main( int argc, char *argv[] )
 
 	// Create/open the file
 	int fp;
-	fp = open( writefile, O_WRONLY, 0644);
+	fp = open( writefile, O_CREAT |  O_WRONLY, 0644);
 
 	// check file creation/opening failure
 	if( fp == -1){
@@ -69,5 +69,4 @@ int main( int argc, char *argv[] )
 	
 	return 0;
 }
-
 
