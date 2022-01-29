@@ -1,7 +1,7 @@
 #Makfile to build the writer application
 
 #native compiler
-CC = gcc
+CC =gcc
 
 #compiler flags
 CFLAGS = -g -Wall -Werror
@@ -17,12 +17,12 @@ TARGET = writer
 
 
 %.o: %.c
-	$(CROSS_COMPILE)-$(CC) $(CFLAGS) -c -o $@ $<
+	$(CROSS_COMPILE)$(CC) $(CFLAGS) -c -o $@ $<
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CROSS_COMPILE)-$(CC) $(CFLAGS) $^ -o $@
+	$(CROSS_COMPILE)$(CC) $(CFLAGS) $^ -o $@
 
 
 .PHONY: clean
