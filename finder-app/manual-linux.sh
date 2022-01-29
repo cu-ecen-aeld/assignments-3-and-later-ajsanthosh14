@@ -82,7 +82,6 @@ mkdir -p usr/bin usr/lib usr/sbin
 mkdir -p var/log
 
 echo "Directory created successfully!"
-tree
 
 cd "$OUTDIR"
 if [ ! -d "${OUTDIR}/busybox" ]
