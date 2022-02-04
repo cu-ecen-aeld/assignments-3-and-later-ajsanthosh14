@@ -58,7 +58,7 @@ fi
 #fi
 
 #PATH=$(which finder.sh)
-3if [ -z "$PATH" ]
+if [ -z "$PATH" ]
 #then 
     FINDER=finder.sh
 #else
