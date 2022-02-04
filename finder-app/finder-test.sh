@@ -49,11 +49,6 @@ fi
 #make clean
 #make
 
-
-WRITER=writer	
-FINDER=finder.sh
-
-
 for i in $( seq 1 $NUMFILES)
 do
 	writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
@@ -62,7 +57,7 @@ done
 OUTPUTSTRING=$(finder.sh  "$WRITEDIR" "$WRITESTR")
 
 #Write the output of finder to /tmp/assignment-4-results.txt
-writer "$RESOUTDIR" ${OUTPUTSTRING}
+writer "$RESOUTDIR" "$OUTPUTSTRING"
 
 
 
