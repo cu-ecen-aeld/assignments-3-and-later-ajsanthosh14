@@ -52,17 +52,17 @@ fi
 PATH=$(which writer)
 if [ -z "$PATH" ]
 then
-    WRITER=writer
+    WRITER=./writer
 else
-    WRITER=./writer	
+    WRITER=writer	
 fi
 
 PATH=$(which finder.sh)
 if [ -z "$PATH" ]
 then 
-    FINDER=finder.sh
-else
     FINDER=./finder.sh
+else
+    FINDER=finder.sh
 fi
 
 for i in $( seq 1 $NUMFILES)
