@@ -49,21 +49,10 @@ fi
 #make clean
 #make
 
-PATH=$(which writer)
-if [ -z "$PATH" ]
-then
-    WRITER=./writer
-else
-    WRITER=writer	
-fi
 
-PATH=$(which finder.sh)
-if [ -z "$PATH" ]
-then 
-    FINDER=./finder.sh
-else
-    FINDER=finder.sh
-fi
+WRITER=writer	
+FINDER=finder.sh
+
 
 for i in $( seq 1 $NUMFILES)
 do
