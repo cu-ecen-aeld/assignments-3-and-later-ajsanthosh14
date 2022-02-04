@@ -56,13 +56,13 @@ FINDER=finder.sh
 
 for i in $( seq 1 $NUMFILES)
 do
-	${WRITER} "$WRITEDIR/${username}$i.txt" "$WRITESTR"
+	writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
 done
 
-OUTPUTSTRING=$(${FINDER} "$WRITEDIR" "$WRITESTR")
+OUTPUTSTRING=$(finder.sh  "$WRITEDIR" "$WRITESTR")
 
 #Write the output of finder to /tmp/assignment-4-results.txt
-${WRITER} "$RESOUTDIR" ${OUTPUTSTRING}
+writer "$RESOUTDIR" ${OUTPUTSTRING}
 
 
 
