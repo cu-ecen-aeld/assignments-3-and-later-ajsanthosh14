@@ -12,7 +12,7 @@ WRITEDIR=/tmp/aeld-data
 # modified to run in target(assignment4-Part2)
 #username=$(cat conf/username.txt)
 username=$(cat /etc/finder-app/conf/username.txt)
-RESOUTDIR=/tmp/assignmnet-4-result.txt
+RESOUTDIR=/tmp/assignment-4-result.txt
 
 if [ $# -lt 2 ]
 then
