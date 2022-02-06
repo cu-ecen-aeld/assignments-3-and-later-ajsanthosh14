@@ -49,15 +49,31 @@ fi
 #make clean
 #make
 
+
+WRITER="writer"
+FINDER="finder.sh"
+
+# check for application path
+if [ -z $(which writer) ]
+then
+	WRITER="./writer"
+fi
+
+if [ -z $(which finder.sh) ]
+then
+        FINDER="./finder.sh"
+fi
+
+
 for i in $( seq 1 $NUMFILES)
 do
-	writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
+	${WRITER} "$WRITEDIR/${username}$i.txt" "$WRITESTR"
 done
 
-OUTPUTSTRING=$(finder.sh  "$WRITEDIR" "$WRITESTR")
+OUTPUTSTRING=$(${FINDER}  "$WRITEDIR" "$WRITESTR")
 
 #Write the output of finder to /tmp/assignment-4-results.txt
-writer "$RESOUTDIR" "$OUTPUTSTRING"
+${WRITER} "$RESOUTDIR" "$OUTPUTSTRING"
 
 
 
