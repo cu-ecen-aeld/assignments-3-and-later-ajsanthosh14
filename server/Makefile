@@ -1,0 +1,30 @@
+# Makefile to build the aesdsocket application
+
+# Native compilor
+CC = gcc
+
+# Compiler flags 
+CFLAGS = -g -Wall -Werror
+
+# Source file
+SRCS = aesdsocket.c
+
+# Object files
+OBJS = $(SRCS:.c=.o)
+
+# Executable Target file
+TARGET = aesdsocket
+
+%.o: %.c
+	$(CROSS_COMPILE)$(CC) $(CFLAGS) -c -o $@ $<
+
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	$(CROSS_COMPILE)$(CC) $(CFLAGS) $^ -o $@
+
+
+.PHONY: clean
+
+clean:
+	$(RM) $(TARGET) *.o *.elf *.map
