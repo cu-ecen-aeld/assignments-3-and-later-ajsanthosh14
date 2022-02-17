@@ -12,6 +12,10 @@
 #include <signal.h>
 
 #include <fcntl.h>
+#include <stdbool.h>
+
+#include <sys/stat.h>
+#include <syslog.h>
 
 #define PORT "9000"
 #define BACKLOG (10)
@@ -43,6 +47,8 @@ void sigchld_handler(int signo)
 }
 
 
+
+
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
 {
@@ -54,10 +60,47 @@ void *get_in_addr(struct sockaddr *sa)
 }
 
 
-int main()
+//Reference: http://www.netzmafia.de/skripten/unix/linux-daemon-howto.html
+void runAsDaemon()
+{
+	pid_t pid, sid;
+	
+	//Fork the parent process
+	pid = fork();
+	//error
+	if(pid < 0)
+	    exit(EXIT_FAILURE);
+	//if no error, exit the parent process
+	if(pid > 0)
+	    exit(EXIT_SUCCESS);
+	    
+	// Change the file mode mask
+	umask(0);
+	
+	// TODO: logging
+	
+	// Creating new SID for the child process
+	sid = setsid();
+	if(sid < 0)
+	    exit(EXIT_FAILURE);
+	    
+	// Change the current working directory
+	if((chdir("/")) < 0)
+	    exit(EXIT_FAILURE);    
+	
+	// TODO: redirect standard IO to /dev/null
+
+	// close std file descriptors
+	close(STDIN_FILENO);
+	close(STDOUT_FILENO);
+	close(STDERR_FILENO);
+}
+
+
+
+int main(int argc, char **argv)
 {
 	printf("Hello AESDSOCKET!\n");
-
 	struct addrinfo hints, *servinfo, *p;
 	struct sockaddr_storage their_addr;
 	socklen_t sin_size;
@@ -126,14 +169,18 @@ int main()
         	exit(1);
     	}
 
-    	printf("server: waiting for connections...\n");
 
+
+    	printf("server: waiting for connections...\n");
+		
+	if(argc >=2 && (strcmp(argv[1],"-d") == 0))
+		runAsDaemon();
 
 
 	ssize_t total_b = 0;
 	while(1) {  // main accept() loop
 	
-		char buffer[1024];
+		char buffer[1000];
 		// Accept connection
 	
 		sin_size = sizeof their_addr;
