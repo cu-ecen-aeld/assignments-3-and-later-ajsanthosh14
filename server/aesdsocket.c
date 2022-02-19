@@ -48,7 +48,6 @@
 #define PORT "9000"
 #define BACKLOG (10)
 #define WRITE_FILE "/var/tmp/aesdsocketdata"
-//#define WRITE_FILE "sample.txt"
 #define LOG_ERROR(msg, ...) 	syslog(LOG_ERR, msg, ##__VA_ARGS__) 
 #define LOG_MSG(msg, ...)	syslog(LOG_INFO, msg, ##__VA_ARGS__) 
 #define LOG_WARN(msg, ...)  	syslog(LOG_WARNING, msg, ##__VA_ARGS__)  
@@ -69,24 +68,28 @@ char *rdBuff=NULL;
 void closeAll()
 {
 
+	// free read-write buffer
 	if(rdBuff != NULL){
 		free(rdBuff);
 		rdBuff = NULL;
 	}
 		
+	// close file descriptors	
 	shutdown(servfd, SHUT_RDWR);
 	close(servfd);
 	shutdown(clientfd, SHUT_RDWR);
 	close(clientfd);
 	
+	// delete the data file
 	remove(WRITE_FILE);
 	
+	//close the logging
 	closelog();
 }
 
 void signal_handler(int signo)
 {
-	//LOG_WARN("Caught signal, exiting\n");
+	LOG_WARN("Caught signal, exiting\n");
     	closeAll();
 	exit(0);
     
@@ -103,20 +106,21 @@ void *get_in_addr(struct sockaddr *sa)
 }
 
 
-//Reference: http://www.netzmafia.de/skripten/unix/linux-daemon-howto.html
 void runAsDaemon()
 {
-	signal(SIGINT, signal_handler);
-	signal(SIGTERM, signal_handler);
-	
+
 	pid_t pid, sid;
+	
+	// signals to be ignored
+	signal(SIGCHLD, SIG_IGN);
+        signal(SIGHUP, SIG_IGN);
 	
 	//Fork the parent process
         pid = fork();
 	
 	if(pid < 0){
             perror("fork():");
-            //LOG_ERROR("fork(): %s", strerror(errno));
+            LOG_ERROR("fork(): %s", strerror(errno));
             closeAll();
             exit(EXIT_FAILURE);
         }
@@ -133,14 +137,14 @@ void runAsDaemon()
         sid = setsid();
         if(sid < 0){
             perror("setsid()():");
-            //LOG_ERROR("setsid(): %s", strerror(errno));
+            LOG_ERROR("setsid(): %s", strerror(errno));
             exit(EXIT_FAILURE);
         }
 
         // Change the current working directory
         if((chdir("/")) < 0){
             perror("chdir():"); 
-            //LOG_ERROR("chdir(): %s", strerror(errno));	 	
+            LOG_ERROR("chdir(): %s", strerror(errno));	 	
             exit(EXIT_FAILURE);
 	}
 	
@@ -165,8 +169,18 @@ int main(int argc, char **argv)
 	openlog(NULL,0,LOG_USER);
 	
 	// register signals
-	signal(SIGINT, signal_handler);
-	signal(SIGTERM, signal_handler);
+	if(signal(SIGINT, signal_handler) == SIG_ERR){
+		LOG_ERROR("Error while registering SIGINT");
+		closeAll();
+		return -1;
+	}
+
+
+	if(signal(SIGTERM, signal_handler) == SIG_ERR){
+		LOG_ERROR("Error while registering SIGTERM");
+		closeAll();
+		return -1;
+	}
 	
 	bool flagDaemon = false;
 	if(argc >=2 && (strcmp(argv[1],"-d") == 0))
@@ -206,21 +220,21 @@ int main(int argc, char **argv)
         	if ((servfd = socket(p->ai_family, p->ai_socktype,
                 	p->ai_protocol)) == -1) {
             		perror("server: socket");
-            		//LOG_ERROR("server: socket: %s", strerror(errno));
+            		LOG_ERROR("server: socket: %s", strerror(errno));
             		continue;
         	}
 
         	if (setsockopt(servfd, SOL_SOCKET, SO_REUSEADDR, &yes,
                 	sizeof(int)) < 0 ) {
             		perror("setsockopt");
-            		//LOG_ERROR("setsocket: %s", strerror(errno));
+            		LOG_ERROR("setsocket: %s", strerror(errno));
             		exit(1);
         	}
 
         	if (bind(servfd, p->ai_addr, p->ai_addrlen) == -1) {
             		close(servfd);
             		perror("server: bind");
-            		//LOG_ERROR("server: bind:  %s", strerror(errno));
+            		LOG_ERROR("server: bind:  %s", strerror(errno));
             		continue;
         	}
 
@@ -231,7 +245,7 @@ int main(int argc, char **argv)
 	
 	if (p == NULL)  {
         	fprintf(stderr, "server: failed to bind\n");
-        	//LOG_ERROR("server:failed to bind: %s", strerror(errno));
+        	LOG_ERROR("server:failed to bind: %s", strerror(errno));
         	exit(1);
     	}
 
@@ -241,7 +255,7 @@ int main(int argc, char **argv)
     	
     	if (listen(servfd, BACKLOG) == -1) {
         	perror("listen");
-        	//LOG_ERROR("listen: %s", strerror(errno));
+        	LOG_ERROR("listen: %s", strerror(errno));
         	exit(1);
     	}
 
@@ -250,13 +264,13 @@ int main(int argc, char **argv)
     	printf("server: waiting for connections...\n");
 	
 
-	ssize_t total_b = 0;
+	ssize_t totalBytes = 0;
 	while(1) {  // main accept() loop
 	
 		char buffer[1024];
 		rdBuff = malloc(sizeof(char));
+		
 		// Accept connection
-	
 		sin_size = sizeof their_addr;
 		clientfd = accept(servfd, (struct sockaddr *)&their_addr, &sin_size);
 		if (clientfd == -1) {
@@ -268,25 +282,46 @@ int main(int argc, char **argv)
 		    get_in_addr((struct sockaddr *)&their_addr),
 		    s, sizeof s);
 		printf("server: got connection from %s\n", s);
-		//LOG_MSG("Accepted connection from %s", s);
+		LOG_MSG("Accepted connection from %s", s);
 
 
 		int fd = open(WRITE_FILE, O_CREAT, 0644);	
+		if(fd < 0){
+			LOG_ERROR("Error opening %s",WRITE_FILE);
+			closeAll();
+			return -1;
+		}
 		close(fd);
 		
-		// Receive and write to file
+		// Receive and write to WRITE_FILE
 		fd =open(WRITE_FILE,O_WRONLY);
+		if(fd < 0){
+			LOG_ERROR("Error opening %s",WRITE_FILE);
+			closeAll();
+			return -1;
+		}
+		
 	        lseek(fd,0,SEEK_END);
 	        unsigned long index = 0;
 		while(1){
 		
 			ssize_t rBytes = recv(clientfd, buffer, sizeof(buffer), 0);
+			if(rBytes == -1){
+				LOG_ERROR("recv():%s", strerror(errno));
+				closeAll();
+				return -1;
+			}
 			rdBuff = realloc(rdBuff,index+rBytes);
 			memcpy(rdBuff+index,buffer,rBytes);
 			index += rBytes;
-			total_b += rBytes;
+			totalBytes += rBytes;
 			if(buffer[rBytes-1] == '\n'){
-				write(fd, rdBuff, index);
+				
+				if(write(fd, rdBuff, index) == -1){
+					LOG_ERROR("write():%s", strerror(errno));
+					closeAll();
+					return -1;
+				}
 				break;
 			}
 		}
@@ -294,24 +329,38 @@ int main(int argc, char **argv)
 		free(rdBuff);
 		rdBuff=NULL;	
 		
-		// Send 
+		// Send complete data from WRITE_FILE to the client
 		fd =open(WRITE_FILE,O_RDONLY);
-		ssize_t rd = total_b;
-		rdBuff = realloc(rdBuff,rd);
+		if(fd < 0){
+			LOG_ERROR("Error opening %s",WRITE_FILE);
+			closeAll();
+			return -1;
+		}
+		ssize_t sendBytes = totalBytes;
+		rdBuff = realloc(rdBuff,sendBytes);
 		lseek(fd,0,SEEK_SET);
 		while(1){		
 			
-			int r = read(fd, rdBuff,rd);
-			send(clientfd, rdBuff, r, 0);
-			rd -= r;
-			if(rd == 0)
+			int rBytes = read(fd, rdBuff,sendBytes);
+			if(rBytes == -1){
+				LOG_ERROR("read():%s", strerror(errno));
+				closeAll();
+				return -1;
+			}
+			if(send(clientfd, rdBuff, rBytes, 0) == -1){
+				LOG_ERROR("send():%s", strerror(errno));
+				closeAll();
+				return -1;
+			}
+			sendBytes -= rBytes;
+			if(sendBytes == 0)
 				break;
 		}
 		free(rdBuff);
 		rdBuff=NULL;
 		close(fd);
 		close(clientfd);
-		//LOG_MSG("Closed connection from %s", s);
+		LOG_MSG("Closed connection from %s", s);
 		printf("server: closed connection with %s\n", s);
 		
 
