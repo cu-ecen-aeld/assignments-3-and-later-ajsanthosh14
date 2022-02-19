@@ -19,6 +19,7 @@ TARGET = aesdsocket
 	$(CROSS_COMPILE)$(CC) $(CFLAGS) -c -o $@ $<
 
 all: $(TARGET)
+default: $(TARGET)
 
 $(TARGET): $(OBJS)
 	$(CROSS_COMPILE)$(CC) $(CFLAGS) $^ -o $@
