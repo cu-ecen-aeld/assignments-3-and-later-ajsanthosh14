@@ -3,6 +3,9 @@
 # Native compilor
 CC = gcc
 
+# Cross compiler 
+CROSS_COMPILE =
+
 # Compiler flags 
 CFLAGS = -g -Wall -Werror
 
