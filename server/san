@@ -47,11 +47,11 @@
  ******************************************************************************/
 #define PORT "9000"
 #define BACKLOG (10)
-#define WRITE_FILE "/var/tmp/aesdsocketdata"
-//#define WRITE_FILE "sample.txt"
+//#define WRITE_FILE "/var/tmp/aesdsocketdata"
+#define WRITE_FILE "sample.txt"
 #define LOG_ERROR(msg, ...) 	syslog(LOG_ERR, msg, ##__VA_ARGS__) 
 #define LOG_MSG(msg, ...)	syslog(LOG_INFO, msg, ##__VA_ARGS__) 
-#define LOG_WARN(msg, ...)  	syslog(LOG_WARNING, msg, ##__VA_ARGS__)  
+#define LOG_WARN(msg, ...)  syslog(LOG_WARNING, msg, ##__VA_ARGS__)  
 /******************************************************************************
  *
  *                                  GLOBALS
@@ -63,111 +63,27 @@ char *rdBuff=NULL;
 
 /******************************************************************************
  *
- * 				    FUNCTIONS
+ * 				FUNCTION HEADERS
  *
  ******************************************************************************/ 
-void closeAll()
-{
+void closeAll();
 
-	if(rdBuff != NULL){
-		free(rdBuff);
-		rdBuff = NULL;
-	}
-		
-	shutdown(servfd, SHUT_RDWR);
-	close(servfd);
-	shutdown(clientfd, SHUT_RDWR);
-	close(clientfd);
-	
-	remove(WRITE_FILE);
-	
-	closelog();
-}
+void sigchld_handler(int s);
 
-void signal_handler(int signo)
-{
-	//LOG_WARN("Caught signal, exiting\n");
-    	closeAll();
-	exit(0);
-    
-}
+void signal_handler(int signo);
 
-// get sockaddr, IPv4 or IPv6:
-void *get_in_addr(struct sockaddr *sa)
-{
-    if (sa->sa_family == AF_INET) {
-        return &(((struct sockaddr_in*)sa)->sin_addr);
-    }
+void *get_in_addr(struct sockaddr *sa);
 
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
+void runAsDaemon();
 
 
-//Reference: http://www.netzmafia.de/skripten/unix/linux-daemon-howto.html
-void runAsDaemon()
-{
-	signal(SIGINT, signal_handler);
-	signal(SIGTERM, signal_handler);
-	
-	pid_t pid, sid;
-	
-	//Fork the parent process
-        pid = fork();
-	
-	if(pid < 0){
-            perror("fork():");
-            //LOG_ERROR("fork(): %s", strerror(errno));
-            closeAll();
-            exit(EXIT_FAILURE);
-        }
-        
-        //if no error, exit the parent process
-        if(pid > 0)
-            exit(EXIT_SUCCESS);
-
-        // Change the file mode mask
-        umask(0);
-
-
-        // Creating new SID for the child process
-        sid = setsid();
-        if(sid < 0){
-            perror("setsid()():");
-            //LOG_ERROR("setsid(): %s", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
-        // Change the current working directory
-        if((chdir("/")) < 0){
-            perror("chdir():"); 
-            //LOG_ERROR("chdir(): %s", strerror(errno));	 	
-            exit(EXIT_FAILURE);
-	}
-	
-        // redirect standard IO to /dev/null
-    	int extf = open("/dev/null", O_RDWR);
-   	dup2(extf, STDIN_FILENO);
-    	dup2(extf, STDOUT_FILENO);
-    	dup2(extf, STDERR_FILENO);
-    	
-        // close std file descriptors
-        close(STDIN_FILENO);
-        close(STDOUT_FILENO);
-        close(STDERR_FILENO);
-        close(extf);
-}
-
-
-
+/********************************************************************************
+ * 
+ *				MAIN FUNCTION
+ *
+ ********************************************************************************/
 int main(int argc, char **argv)
 {
-	
-	openlog(NULL,0,LOG_USER);
-	
-	// register signals
-	signal(SIGINT, signal_handler);
-	signal(SIGTERM, signal_handler);
-	
 	bool flagDaemon = false;
 	if(argc >=2 && (strcmp(argv[1],"-d") == 0))
 		flagDaemon = true;
@@ -180,10 +96,10 @@ int main(int argc, char **argv)
 	struct addrinfo hints, *servinfo, *p;
 	struct sockaddr_storage their_addr;
 	socklen_t sin_size;
+	struct sigaction sa;
 	int yes = 1;
 	char s[INET6_ADDRSTRLEN];
 	int rv;
-
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;     
@@ -235,32 +151,39 @@ int main(int argc, char **argv)
         	exit(1);
     	}
 
-
-	if(flagDaemon)
-		runAsDaemon();
-    	
     	if (listen(servfd, BACKLOG) == -1) {
         	perror("listen");
         	//LOG_ERROR("listen: %s", strerror(errno));
         	exit(1);
     	}
 
+    	sa.sa_handler = sigchld_handler; // reap all dead processes
+    	sigemptyset(&sa.sa_mask);
+    	sa.sa_flags = SA_RESTART;
+    	if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+        	perror("sigaction");
+        	//LOG_ERROR("sigaction: %s", strerror(errno));
+        	exit(1);
+    	}
 
-	
     	printf("server: waiting for connections...\n");
-	
+		
+	if(flagDaemon)
+		runAsDaemon();
 
-	ssize_t total_b = 0;
-	while(1) {  // main accept() loop
+	ssize_t total_b = 0; //total number of bytes received
+	// Accepts connections from new clients forever until signal
+	while(1) {  
 	
-		char buffer[1024];
-		rdBuff = malloc(sizeof(char));
+		
+		char tmpBuff[1000];
 		// Accept connection
 	
 		sin_size = sizeof their_addr;
 		clientfd = accept(servfd, (struct sockaddr *)&their_addr, &sin_size);
 		if (clientfd == -1) {
 		    perror("accept");
+		    LOG_ERROR("accept: %s", strerror(errno));
 		    continue;
 		}
 
@@ -268,7 +191,7 @@ int main(int argc, char **argv)
 		    get_in_addr((struct sockaddr *)&their_addr),
 		    s, sizeof s);
 		printf("server: got connection from %s\n", s);
-		//LOG_MSG("Accepted connection from %s", s);
+		LOG_MSG("Accepted connection from %s", s);
 
 
 		int fd = open(WRITE_FILE, O_CREAT, 0644);	
@@ -277,27 +200,26 @@ int main(int argc, char **argv)
 		// Receive and write to file
 		fd =open(WRITE_FILE,O_WRONLY);
 	        lseek(fd,0,SEEK_END);
-	        unsigned long index = 0;
 		while(1){
 		
-			ssize_t rBytes = recv(clientfd, buffer, sizeof(buffer), 0);
-			rdBuff = realloc(rdBuff,index+rBytes);
-			memcpy(rdBuff+index,buffer,rBytes);
-			index += rBytes;
+			ssize_t rBytes = recv(clientfd, tmpBuff, sizeof(tmpBuff), 0);
+			//printf("Received %ld bytes\n",rBytes);
+			rdBuff= realloc(rdBuff,rBytes);
+			memcpy(rdBuff,tmpBuff,rBytes);
 			total_b += rBytes;
-			if(buffer[rBytes-1] == '\n'){
-				write(fd, rdBuff, index);
+			if(tmpBuff[rBytes-1] == '\n'){
+				write(fd, rdBuff, rBytes);
 				break;
 			}
 		}
-		close(fd);	
+		close(fd);		
 		free(rdBuff);
-		rdBuff=NULL;	
+		rdBuff=NULL;
 		
-		// Send 
+		// Send data from WRITE_FILE to client
 		fd =open(WRITE_FILE,O_RDONLY);
 		ssize_t rd = total_b;
-		rdBuff = realloc(rdBuff,rd);
+		rdBuff = realloc(rdBuff,total_b);
 		lseek(fd,0,SEEK_SET);
 		while(1){		
 			
@@ -307,16 +229,113 @@ int main(int argc, char **argv)
 			if(rd == 0)
 				break;
 		}
+		
 		free(rdBuff);
 		rdBuff=NULL;
 		close(fd);
 		close(clientfd);
-		//LOG_MSG("Closed connection from %s", s);
 		printf("server: closed connection with %s\n", s);
-		
+		LOG_MSG("Closed connection from %s", s);
 
     	}
     	
 	closeAll();
 	return 0;
 }
+
+
+void runAsDaemon()
+{
+        pid_t pid, sid;
+
+        //Fork the parent process
+        pid = fork();
+        
+        if(pid < 0){
+            perror("fork():");
+            LOG_ERROR("fork(): %s", strerror(errno));
+            closeAll();
+            exit(EXIT_FAILURE);
+        }
+        
+        //if no error, exit the parent process
+        if(pid > 0)
+            exit(EXIT_SUCCESS);
+
+        // Change the file mode mask
+        umask(0);
+
+
+        // Creating new SID for the child process
+        sid = setsid();
+        if(sid < 0){
+            perror("setsid()():");
+            LOG_ERROR("setsid(): %s", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+
+        // Change the current working directory
+        if((chdir("/")) < 0){
+            perror("chdir():"); 
+            LOG_ERROR("chdir(): %s", strerror(errno));	 	
+            exit(EXIT_FAILURE);
+	}
+	
+        // redirect standard IO to /dev/null
+    	int devnull = open("/dev/null", O_RDWR);
+   	dup2(devnull, STDIN_FILENO);
+    	dup2(devnull, STDOUT_FILENO);
+    	dup2(devnull, STDERR_FILENO);
+    	
+        // close std file descriptors
+        close(STDIN_FILENO);
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
+}
+
+void closeAll()
+{
+	// Remove WRITE_FILE
+	remove(WRITE_FILE);
+
+	// free read-write buffer
+	if(rdBuff != NULL){
+	    free(rdBuff);		
+	    rdBuff=NULL;
+        }
+        
+        // close server and client file descriptors
+        close(servfd);
+        close(clientfd);
+}
+
+
+void sigchld_handler(int s)
+{
+    //waitpid() might overwrite errno, so we save and restore it:
+    int saved_errno = errno;
+ 
+    while(waitpid(-1, NULL, WNOHANG) > 0);
+    
+    errno = saved_errno;
+
+}
+
+void signal_handler(int signo)
+{
+	LOG_WARN("Caught signal, exiting");
+	closeAll();
+	exit(0);
+}
+
+
+// get sockaddr, IPv4 or IPv6:
+void *get_in_addr(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET) {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
+    }
+
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
