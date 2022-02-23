@@ -281,16 +281,18 @@ void *socketHandler(void *data)
 	free(rdBuff);
 	rdBuff=NULL;
 	close(fd);
+	close(thread_data->clientfd);
 	thread_data->thread_status = T_COMPLETE;
 	
 	pe = pthread_mutex_unlock(&mutex);
 	if(pe != 0){
-		LOG_ERROR("Error in mutex unlock: %s",strerror(errno));
+		LOG_ERROR("Error in mutex unlock: %s", strerror(errno));
 		closeAll();
 		exit(EXIT_FAILURE);
 	}
-	pthread_mutex_unlock(&mutex);
-	close(clientfd);
+
+	//shutdown(clientfd, SHUT_RDWR);
+	
 	return thread_data;
 }
 
@@ -403,8 +405,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	
-	//set alaram for 10 seconds
-	alarm(10);
+	
 	
 	bool flagDaemon = false;
 	if(argc >=2 && (strcmp(argv[1],"-d") == 0))
@@ -491,6 +492,10 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	close(fd);
+
+
+	//set alaram for 10 seconds
+	alarm(10);
 
 	totalBytes = 0;
 	while(1) {  // main accept() loop
