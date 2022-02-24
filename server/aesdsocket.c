@@ -422,7 +422,9 @@ int main(int argc, char **argv)
 	int yes = 1;
 	char s[INET6_ADDRSTRLEN];
 	int rv;
-
+	
+	totalBytes = 0;
+	int firstThread = 0;
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;     
@@ -494,10 +496,6 @@ int main(int argc, char **argv)
 	close(fd);
 
 
-	//set alaram for 10 seconds
-	alarm(10);
-
-	totalBytes = 0;
 	while(1) {  // main accept() loop
 		
 		// Accept connection
@@ -527,6 +525,11 @@ int main(int argc, char **argv)
 		pthread_t thread;
 		pthread_create(&thread, NULL, socketHandler, &(tNode->thread_data));
 		
+		if(!firstThread){
+			firstThread = 1;
+			//set alaram for 10 seconds
+			alarm(10);
+		}
 		tNode->thread_data.thread = thread;
 
 		// Traverse through the thread list and remove, whichever is complete
