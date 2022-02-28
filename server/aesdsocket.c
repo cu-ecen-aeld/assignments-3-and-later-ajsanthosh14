@@ -45,6 +45,7 @@
 #include <pthread.h>
 #include <time.h>
 #include <sys/queue.h>
+#include <stdbool.h>
 
 /******************************************************************************
  *
@@ -64,9 +65,11 @@
  *
  ******************************************************************************/
 
-static int servfd, clientfd;
+static int servfd, clientfd, fd;
 char *rdBuff=NULL;
 int totalBytes=0;
+static volatile bool globalExit = false;
+pthread_t timerThread;
 
 // Initialize mutex
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -91,7 +94,7 @@ struct slist_threads{
 	threads_data thread_data;
 	SLIST_ENTRY(slist_threads) entries;
 };
-
+SLIST_HEAD(slisthead, slist_threads) head;
 
 /******************************************************************************
  *
@@ -102,7 +105,7 @@ struct slist_threads{
 // Gracefull exit
 void closeAll()
 {
-
+	
 	// free read-write buffer
 	if(rdBuff != NULL){
 		free(rdBuff);
@@ -114,32 +117,34 @@ void closeAll()
 	close(servfd);
 	shutdown(clientfd, SHUT_RDWR);
 	close(clientfd);
+
+	thread_list *tNode = NULL;
 	
+    	while(!SLIST_EMPTY(&head)){
+    		tNode = SLIST_FIRST(&head);
+    		SLIST_REMOVE_HEAD(&head, entries);
+    		free(tNode);
+	}
+	tNode = NULL;
+	
+	
+	//close file descripter
+	close(fd);
 	// delete the data file
 	remove(WRITE_FILE);
 	
+
 	//close the logging
 	closelog();
-}
-
-// SIGNIT and SIGTERM signal handler
-void signal_handler(int signo)
-{
-	LOG_WARN("Caught signal, exiting\n");
-    	closeAll();
+	
+	// join timmer thread
+	pthread_join(timerThread,NULL);
+	
+	pthread_mutex_destroy(&mutex);
+	
 	exit(0);
-    
 }
 
-// get sockaddr, IPv4 or IPv6:
-void *get_in_addr(struct sockaddr *sa)
-{
-    if (sa->sa_family == AF_INET) {
-        return &(((struct sockaddr_in*)sa)->sin_addr);
-    }
-
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
 
 // to run as daemon 
 void runAsDaemon()
@@ -216,7 +221,7 @@ void *socketHandler(void *data)
 	
 	
 	// Receive and write to WRITE_FILE
-	int fd =open(WRITE_FILE,O_WRONLY);
+	fd =open(WRITE_FILE,O_WRONLY);
 	if(fd < 0){
 		LOG_ERROR("Error opening %s",WRITE_FILE);
 		closeAll();
@@ -293,72 +298,91 @@ void *socketHandler(void *data)
 
 	//shutdown(clientfd, SHUT_RDWR);
 	
-	return thread_data;
+	pthread_exit(NULL);
 }
 
-// SIGALRM signal Handler
-void insert_timestamp()
+// timer thread
+void *insert_timestamp()
 {
-	char outstr[22];
-	time_t t;
-   	struct tm *tmp;
+	while(!globalExit){
+	
+		sleep(10);
+		char outstr[100];
+		time_t t;
+	   	struct tm *tmp;
 
-	t = time(NULL);
-	tmp = localtime(&t);
-   	
-   	if (tmp == NULL) {
-               LOG_ERROR("localtime error: %s",strerror(errno));
-	       exit(EXIT_FAILURE);
-    	}
+		t = time(NULL);
+		tmp = localtime(&t);
+	   	
+	   	if (tmp == NULL) {
+		       LOG_ERROR("localtime error: %s",strerror(errno));
+		       exit(EXIT_FAILURE);
+	    	}
 
-   	if (strftime(outstr, sizeof(outstr),"%Y %b %e %H:%M:%S", tmp) == 0) {
-	       fprintf(stderr, "strftime returned 0");
-	       exit(EXIT_FAILURE);
-	}
-	
-	char timeOut[33] = "timestamp: ";
-   	strcat(timeOut,outstr);
-   	strcat(timeOut,"\n");
-
-	int pe = pthread_mutex_lock(&mutex);
-	if(pe != 0){
-		LOG_ERROR("Error in mutex lock: %s",strerror(errno));
-		closeAll();
-		exit(EXIT_FAILURE);
-	}
-	
-	//write to file
-	int fd =open(WRITE_FILE,O_WRONLY);
-	if(fd < 0){
-		LOG_ERROR("Error opening %s",WRITE_FILE);
-		closeAll();
-		exit(1);
-	}
-	
-        lseek(fd,0,SEEK_END);
-
-	rdBuff = realloc(rdBuff,33);
-	memcpy(rdBuff,timeOut,33);
-	
-	if(write(fd, rdBuff, 33) == -1){
-		LOG_ERROR("write():%s", strerror(errno));
-		closeAll();
-		exit(1);
-	}
-	close(fd);
-	free(rdBuff);
-	rdBuff=NULL;	
-	totalBytes += 33;
-	
-	alarm(10);
+		int len_outstr = strftime(outstr, sizeof(outstr),"timestamp: %Y %b %e %H:%M:%S\n", tmp);
+	   	if ( len_outstr == 0) {
+		       fprintf(stderr, "strftime returned 0");
+		       exit(EXIT_FAILURE);
+		}
 		
-	pe = pthread_mutex_unlock(&mutex);
-	if(pe != 0){
-		LOG_ERROR("Error in mutex unlock: %s",strerror(errno));
-		closeAll();
-		exit(EXIT_FAILURE);
+		int pe = pthread_mutex_lock(&mutex);
+		if(pe != 0){
+			LOG_ERROR("Error in mutex lock: %s",strerror(errno));
+			closeAll();
+			exit(EXIT_FAILURE);
+		}
+		
+		//write to file
+		fd =open(WRITE_FILE,O_WRONLY);
+		if(fd < 0){
+			LOG_ERROR("Error opening %s",WRITE_FILE);
+			closeAll();
+			exit(1);
+		}
+		
+		lseek(fd,0,SEEK_END);
+
+		
+		if(write(fd, outstr, len_outstr) == -1){
+			LOG_ERROR("write():%s", strerror(errno));
+			closeAll();
+			exit(1);
+		}
+		close(fd);
+		//free(rdBuff);
+		totalBytes += len_outstr;
+			
+		pe = pthread_mutex_unlock(&mutex);
+		if(pe != 0){
+			LOG_ERROR("Error in mutex unlock: %s",strerror(errno));
+			closeAll();
+			exit(EXIT_FAILURE);
+		}
+		
 	}
 	
+	pthread_exit(NULL);
+}
+
+
+// SIGNIT and SIGTERM signal handler
+void signal_handler(int signo)
+{
+	LOG_WARN("Caught signal, exiting\n");
+	globalExit = true;
+    	closeAll();
+	exit(0);
+    
+}
+  
+// get sockaddr, IPv4 or IPv6:
+void *get_in_addr(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET) {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
+    }
+
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
 /******************************************************************************
@@ -382,15 +406,8 @@ int main(int argc, char **argv)
 	}	
 	
 	// thread list init
-	SLIST_HEAD(slisthead, slist_threads) head;
 	SLIST_INIT(&head);
 	
-	// register signals
-	if(signal(SIGALRM, insert_timestamp) == SIG_ERR){
-		LOG_ERROR("Error while registering SIGALRM");
-		closeAll();
-		exit(EXIT_FAILURE);
-	}
 	
 	if(signal(SIGINT, signal_handler) == SIG_ERR){
 		LOG_ERROR("Error while registering SIGINT");
@@ -487,7 +504,7 @@ int main(int argc, char **argv)
     	}
 
 	
-	int fd = open(WRITE_FILE, O_CREAT, 0644);	
+	fd = open(WRITE_FILE, O_CREAT, 0644);	
 	if(fd < 0){
 		LOG_ERROR("Error opening %s",WRITE_FILE);
 		closeAll();
@@ -496,7 +513,7 @@ int main(int argc, char **argv)
 	close(fd);
 
 
-	while(1) {  // main accept() loop
+	while(!globalExit) {  // main accept() loop
 		
 		// Accept connection
 		sin_size = sizeof their_addr;
@@ -524,26 +541,32 @@ int main(int argc, char **argv)
 		
 		pthread_t thread;
 		pthread_create(&thread, NULL, socketHandler, &(tNode->thread_data));
+		tNode->thread_data.thread = thread;
 		
 		if(!firstThread){
 			firstThread = 1;
 			//set alaram for 10 seconds
-			alarm(10);
+			pthread_create(&timerThread,NULL,insert_timestamp,NULL);
+			//alarm(10);
 		}
-		tNode->thread_data.thread = thread;
 
 		// Traverse through the thread list and remove, whichever is complete
+
 		SLIST_FOREACH(tNode, &head, entries){
 			pthread_join(tNode->thread_data.thread,NULL);
 			if(tNode->thread_data.thread_status == T_COMPLETE){
 				SLIST_REMOVE(&head, tNode, slist_threads, entries);
 				free(tNode);
+				tNode=NULL;
 				LOG_MSG("Closed connection from %s", s);
 				break;
+
 			}
-		
+			
 		}
+    		
     	}
+    	
     	
 	closeAll();
 	return 0;
