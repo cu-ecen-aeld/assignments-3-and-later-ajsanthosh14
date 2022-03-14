@@ -54,7 +54,14 @@
  ******************************************************************************/
 #define PORT "9000"
 #define BACKLOG (10)
-#define WRITE_FILE "/var/tmp/aesdsocketdata"
+
+#define USE_AESD_CHAR_DEVICE (1)
+#if (USE_AESD_CHAR_DEVICE == 1)
+  #define WRITEFILE "/dev/aesdchar"
+#else
+  #define WRITEFILE "/var/tmp/aesdsocketdata"
+#endif
+
 #define LOG_ERROR(msg, ...) 	syslog(LOG_ERR, msg, ##__VA_ARGS__) 
 #define LOG_MSG(msg, ...)	syslog(LOG_INFO, msg, ##__VA_ARGS__) 
 #define LOG_WARN(msg, ...)  	syslog(LOG_WARNING, msg, ##__VA_ARGS__)  
@@ -301,6 +308,7 @@ void *socketHandler(void *data)
 	pthread_exit(NULL);
 }
 
+#if (USE_AESD_CHAR_DRIVER == 0)
 // timer thread
 void *insert_timestamp()
 {
@@ -363,7 +371,7 @@ void *insert_timestamp()
 	
 	pthread_exit(NULL);
 }
-
+#endif
 
 // SIGNIT and SIGTERM signal handler
 void signal_handler(int signo)
@@ -543,12 +551,14 @@ int main(int argc, char **argv)
 		pthread_create(&thread, NULL, socketHandler, &(tNode->thread_data));
 		tNode->thread_data.thread = thread;
 		
+		#if (USE_AESD_CHAR_DRIVER == 0)
 		if(!firstThread){
 			firstThread = 1;
-			//set alaram for 10 seconds
+
 			pthread_create(&timerThread,NULL,insert_timestamp,NULL);
-			//alarm(10);
+
 		}
+		#endif
 
 		// Traverse through the thread list and remove, whichever is complete
 
