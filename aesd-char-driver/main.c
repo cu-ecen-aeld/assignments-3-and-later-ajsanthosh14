@@ -31,10 +31,8 @@ struct aesd_dev aesd_device;
 
 int aesd_open(struct inode *inode, struct file *filp)
 {
-	
 
 	 //S:
-	 
 	 //Ref: LDD - 3.5.1
 	 struct aesd_dev *dev;
 	 dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
@@ -58,8 +56,6 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
                 loff_t *f_pos)
 {
 
-
-
 	ssize_t retval = 0;
 
 	//Ref: LLD 3.7.1
@@ -71,23 +67,28 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	struct aesd_dev *dev =(struct aesd_dev *)filp->private_data;
 	PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
 
-
+	// mutex lock
 	if(mutex_lock_interruptible(&dev->dev_mutex))
 		return -ERESTARTSYS;
 	
+	
+	// find the entry from  the device buffer
 	read_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->dev_buff, *f_pos, &entry_offset);
 	if(read_entry == NULL)
 		goto out;
 		
+	// update read count
 	bRead = read_entry->size - entry_offset; 
 	if(bRead > count)
 		bRead = count;
 		
+	// copy from kernel to userspace	
 	if(copy_to_user(buf, read_entry->buffptr + entry_offset ,bRead)){
 		retval = -EFAULT;
 		goto out;
 	}
 	
+	// update file position
 	*f_pos += bRead;
 	retval =bRead;	
 
@@ -106,7 +107,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	
 	PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 	
-	
+	// mutex lock
 	if(mutex_lock_interruptible(&dev->dev_mutex))
 		return -ERESTARTSYS;
 	 
@@ -141,10 +142,12 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	retval = count - bwrite;
 	dev->write_entry.size += retval;	
 	
-	
 	// Ref: https://man7.org/linux/man-pages/man3/memchr.3.html
+	// To check the null character at the end of the string.
 	if(memchr(dev->write_entry.buffptr, '\n', dev->write_entry.size) != NULL){
 		free_write_entry = aesd_circular_buffer_add_entry(&dev->dev_buff, &dev->write_entry);
+		
+		// free the write_entry
 		if(free_write_entry != NULL)
 			kfree(free_write_entry);
 		
@@ -223,7 +226,6 @@ void aesd_cleanup_module(void)
 
 	
 	//S: Free the device buffer
-	
 	kfree(aesd_device.write_entry.buffptr);
 	
 	AESD_CIRCULAR_BUFFER_FOREACH(dev_entry, &aesd_device.dev_buff, index){
@@ -231,8 +233,6 @@ void aesd_cleanup_module(void)
 			kfree(dev_entry->buffptr);
 	
 	}
-
-	
 	unregister_chrdev_region(devno, 1);
 }
 
