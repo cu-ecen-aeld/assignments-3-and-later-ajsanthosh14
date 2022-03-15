@@ -77,11 +77,11 @@ bool do_exec(int count, ...)
 	perror("ERROR: fork()");
 	return false;
     
-    }else if(pid == 0){ // if child process
+    }else if(pid == 0){
 	    
 	execv(command[0], command);
     	// if execv fails
-	perror("ERROR: execv()");
+	perror("ERROR:execv()");
 	exit(-1);
     }
 
@@ -134,48 +134,41 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     int status;
     pid_t pid;
 
-    // opening file to be redirected to
     int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
-    
-    // File error
-    if(fd < 0){ 
-	perror("ERROR: open()");
-        return false; 
+    //File error
+    if(fd<0){ 
+	    perror("open");
+	    printf("ERROR: Failed to open %s \n",outputfile); 
     }
 
-    // creating new process
+
     pid = fork();
-    
-    // check for fork failure
     if(pid == -1){
-        perror("ERROR: fork()");
-        return false;
-    }
-    // if child process
-    else if(pid == 0){
-	// duplicating file descriptor to redirect standard output	
-	if(dup2(fd,1) < 0){
-	    perror("dup2");
+            printf("ERROR: fork() failed!\n");
 	    return false;
-	}
+    }
+    else if(pid == 0){
 
-	close(fd);
-        execv(command[0], command);
-        perror("ERROR: execv()");
-        exit(-1);
+	    if(dup2(fd,1) < 0){
+	    	perror("dup2");
+		printf("ERROR: File Duplication failed!\n");
+	    }
+	    close(fd);
+            execv(command[0], command);
+            printf("ERROR: execv() returned\n");
+            exit(-1);
     }
 
-    // parent process waiting section
+
     if(waitpid (pid, &status, 0) == -1){
-	perror("ERROR: wait()");
-	close(fd);
-        return false;
+	    close(fd);
+            return false;
     }
 
-    // wait status
+    //printf("\nSTATUS:%d %d\n", WIFEXITED(status), WEXITSTATUS(status));
     if(WIFEXITED (status) && WEXITSTATUS(status)){
-        close(fd);
-        return false;
+            close(fd);
+            return false;
     }
 
     va_end(args);
