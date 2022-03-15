@@ -56,10 +56,10 @@
 #define BACKLOG (10)
 
 #define USE_AESD_CHAR_DEVICE (1)
-#if (USE_AESD_CHAR_DEVICE == 1)
-  #define WRITEFILE "/dev/aesdchar"
+#if (USE_AESD_CHAR_DEVICE == 0)
+  #define WRITE_FILE "/dev/aesdchar"
 #else
-  #define WRITEFILE "/var/tmp/aesdsocketdata"
+  #define WRITE_FILE "/var/tmp/aesdsocketdata"
 #endif
 
 #define LOG_ERROR(msg, ...) 	syslog(LOG_ERR, msg, ##__VA_ARGS__) 
